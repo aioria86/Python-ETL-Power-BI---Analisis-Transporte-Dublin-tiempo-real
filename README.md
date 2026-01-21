@@ -48,6 +48,8 @@ Para que el reporte reciba la data correctamente, el conjunto de datos de stream
    Construye y corre el contenedor vinculando el volumen para el histórico:
    
      docker build -t transporte-irlanda .
+
+   
      docker run --env-file .env -v "${PWD}/data:/app/data" transporte-irlanda python src/main.py
 
 
