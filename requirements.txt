@@ -1,0 +1,6 @@
+pandas
+requests
+protobuf
+gtfs-realtime-bindings
+python-dotenv
+pyarrow
