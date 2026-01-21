@@ -1,0 +1,10 @@
+# Variables de entorno (Seguridad)
+.env
+
+# Datos históricos (Peso)
+data/
+
+# Python e IDEs
+__pycache__/
+.venv/
+.vscode/
