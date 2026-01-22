@@ -28,10 +28,13 @@ Para que el reporte reciba la data correctamente, el conjunto de datos de stream
 | Campo | Tipo de datos | Descripción |
 | :--- | :--- | :--- |
 | `bus_id` | Texto | Identificador único del vehículo |
-| `route_id` | Texto | Identificador de la ruta (Línea) |
-| `latitude` | Número | Latitud (GPS) |
-| `longitude` | Número | Longitud (GPS) |
-| `timestamp` | Fecha y hora | Hora exacta de la captura (ISO format) |
+| `route_id` | Texto | Identificador de la línea de bus |
+| `trip_id` | Texto | ID del viaje específico (nuevo) |
+| `start_time` | Texto | Hora programada de salida (nuevo) |
+| `direction` | Número | Sentido de la ruta: 0 o 1 (nuevo) |
+| `latitude` | Número | GPS Latitud |
+| `longitude` | Número | GPS Longitud |
+| `timestamp` | Fecha y hora | Momento de la captura |
 
 
 3. **Análisis de datos históricos:** Activa esta opción para permitir que Power BI cree un informe con "memoria" sobre los datos recibidos.
