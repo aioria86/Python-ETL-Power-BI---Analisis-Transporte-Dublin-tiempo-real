@@ -9,29 +9,21 @@ from dotenv import load_dotenv
 # Cargar variables de entorno
 load_dotenv()
 
-# Limpieza y carga de claves
-nta_key = os.getenv('NTA_API_KEY')
-API_KEY = nta_key.strip() if nta_key else None
-
-pbi_url = os.getenv('POWERBI_URL')
-POWERBI_URL = pbi_url.strip() if pbi_url else None
+API_KEY = os.getenv('NTA_API_KEY').strip()
+POWERBI_URL = os.getenv('POWERBI_URL').strip() if os.getenv('POWERBI_URL') else None
 
 URL_VEHICULOS = "https://api.nationaltransport.ie/gtfsr/v2/vehicles"
+URL_TRIPS = "https://api.nationaltransport.ie/gtfsr/v2/tripupdates"
 
 def guardar_historico_parquet(lote_datos):
-    """Guarda los datos en formato Parquet siguiendo estructura de Data Lake (10am-6pm)"""
+    """Guarda los datos enriquecidos en formato Parquet (10am-6pm)"""
     ahora = datetime.now()
-    
-    # --- FILTRO DE HORARIO ACTIVADO (10 AM a 6 PM) ---
     if 10 <= ahora.hour < 18: 
-        # 1. Crear ruta de carpetas por fecha (Particionamiento Hive)
         fecha_str = ahora.strftime('%Y-%m-%d')
         ruta_carpeta = f"data/fecha={fecha_str}"
-        
         if not os.path.exists(ruta_carpeta):
             os.makedirs(ruta_carpeta)
         
-        # 2. Convertir a DataFrame y guardar con compresión snappy (por defecto en pandas)
         df = pd.DataFrame(lote_datos)
         nombre_archivo = ahora.strftime('%H_%M_%S') + ".parquet"
         ruta_completa = os.path.join(ruta_carpeta, nombre_archivo)
@@ -41,60 +33,121 @@ def guardar_historico_parquet(lote_datos):
             print(f"💾 Histórico guardado: {ruta_completa}")
         except Exception as e:
             print(f"⚠️ No se pudo guardar Parquet: {e}")
-    else:
-        # Mensaje informativo para cuando estés fuera del rango
-        print(f"🌙 Fuera de horario de guardado (Hora actual: {ahora.strftime('%H:%M')}). No se genera archivo Parquet.")
+
+def obtener_mapa_retrasos():
+    """Descarga los Trip Updates y crea un diccionario por trip_id"""
+    mapa = {}
+    headers = {'x-api-key': API_KEY, 'Cache-Control': 'no-cache'}
+    try:
+        r = requests.get(URL_TRIPS, headers=headers)
+        if r.status_code == 200:
+            feed = gtfs_realtime_pb2.FeedMessage()
+            feed.ParseFromString(r.content)
+            for entity in feed.entity:
+                if entity.HasField('trip_update'):
+                    tu = entity.trip_update
+                    delay_val = 0
+                    stop_val = "N/A"
+                    if tu.stop_time_update:
+                        delay_val = tu.stop_time_update[0].arrival.delay
+                        stop_val = tu.stop_time_update[0].stop_id
+                    
+                    mapa[tu.trip.trip_id] = {
+                        "delay_sec": delay_val,
+                        "stop_id": stop_val,
+                        "rel": str(tu.trip.schedule_relationship)
+                    }
+    except Exception as e:
+        print(f"⚠️ Error obteniendo retrasos: {e}")
+    return mapa
 
 def procesar_flujo():
-    # ⏱️ Cronómetro de inicio de ciclo
     inicio_ciclo = time.time()
-    
     hora_actual_log = datetime.now().strftime('%H:%M:%S')
-    print(f"📡 [{hora_actual_log}] Iniciando extracción NTA...")
+    print(f"📡 [{hora_actual_log}] Iniciando extracción enriquecida...")
     
-    headers = {
-        'x-api-key': API_KEY,
-        'Cache-Control': 'no-cache'
-    }
+    # 1. Obtenemos los retrasos primero
+    mapa_retrasos = obtener_mapa_retrasos()
+    
+    # --- PAUSA TÁCTICA DE SEGURIDAD (Expert Insight) ---
+    # Esperamos 2 segundos entre llamadas para evitar el Error 429 de la NTA
+    time.sleep(2)
+    
+    headers = {'x-api-key': API_KEY, 'Cache-Control': 'no-cache'}
 
     try:
         response = requests.get(URL_VEHICULOS, headers=headers)
-        
         if response.status_code == 200:
             feed = gtfs_realtime_pb2.FeedMessage()
             feed.ParseFromString(response.content)
             
-            lote_datos = []
-            
-            # 🕒 CORRECCIÓN DE ZONA HORARIA (+1h para horario local)
+            lote_enriquecido = []
             fecha_ajustada = (datetime.now() + timedelta(hours=1)).isoformat()
 
             for entity in feed.entity:
                 if entity.HasField('vehicle'):
                     v = entity.vehicle
-                    lote_datos.append({
+                    t_id = v.trip.trip_id
+                    
+                    # 2. CRUCE DE DATOS
+                    info_trip = mapa_retrasos.get(t_id, {
+                        "delay_sec": 0, 
+                        "stop_id": "Desconocida", 
+                        "rel": "UNKNOWN"
+                    })
+
+                    # 3. CÁLCULOS
+                    d_sec = info_trip['delay_sec']
+                    d_min = round(d_sec / 60, 2)
+                    
+                    if d_min > 15: status = "Critico"
+                    elif d_min > 5: status = "Retrasado"
+                    elif d_min < -2: status = "Adelantado"
+                    else: status = "A tiempo"
+
+                    lote_enriquecido.append({
                         "bus_id": str(v.vehicle.id),
                         "route_id": str(v.trip.route_id),
+                        "trip_id": str(t_id),
                         "latitude": float(v.position.latitude),
                         "longitude": float(v.position.longitude),
+                        "delay_sec": int(d_sec),
+                        "delay_min": float(d_min),
+                        "stop_id": str(info_trip['stop_id']),
+                        "schedule_relationship": str(info_trip['rel']),
+                        "punctuality_status": status,
+                        "direction": str(v.trip.direction_id),
                         "timestamp": fecha_ajustada 
                     })
 
-            if lote_datos:
-                print(f"📦 Procesados {len(lote_datos)} buses.")
+            if lote_enriquecido:
+                print(f"📦 Procesados {len(lote_enriquecido)} buses enriquecidos.")
                 
-                # 1. ENVÍO A STREAMING (POWER BI)
+                # 4. GUARDADO LOCAL
+                guardar_historico_parquet(lote_enriquecido)
+
+                # 5. ENVÍO A POWER BI (Bloques optimizados de 25)
                 if POWERBI_URL:
-                    inicio_subida = time.time()
-                    r = requests.post(POWERBI_URL, json=lote_datos)
-                    fin_subida = time.time()
-                    
-                    if r.status_code == 200:
-                        print(f"🚀 ¡Enviado a PBI! ({fin_subida - inicio_subida:.2f}s)")
-                        # 2. GUARDADO EN HISTÓRICO (PARQUET)
-                        guardar_historico_parquet(lote_datos)
-                    else:
-                        print(f"⚠️ Error enviando a PBI: {r.status_code}")
+                    tamano_bloque = 25 
+                    print(f"🚀 Enviando a PBI en mini-bloques...")
+                    try:
+                        exito_total = True
+                        for i in range(0, len(lote_enriquecido), tamano_bloque):
+                            bloque = lote_enriquecido[i:i + tamano_bloque]
+                            r = requests.post(POWERBI_URL, json=bloque)
+                            
+                            if r.status_code != 200:
+                                print(f"⚠️ Error bloque {i}: {r.status_code} - {r.text}")
+                                exito_total = False
+                                break
+                            
+                            # Pausa entre bloques para fluidez de la API
+                            time.sleep(0.1)
+
+                        if exito_total:
+                            print(f"✅ Súper-Main enviado con éxito.")
+                    except Exception as e:
+                        print(f"⚠️ Error conexión PBI: {e}")
             
         else:
             print(f"❌ Error NTA: {response.status_code}")
@@ -102,15 +155,12 @@ def procesar_flujo():
     except Exception as e:
         print(f"❌ Error crítico: {e}")
     
-    # ⏱️ Fin de ciclo
-    print(f"⏱️ Ciclo completo en: {time.time() - inicio_ciclo:.2f} segundos.\n")
+    print(f"⏱️ Ciclo completo: {time.time() - inicio_ciclo:.2f}s\n")
 
 if __name__ == "__main__":
-    print("🟢 SISTEMA HÍBRIDO PROFESIONAL INICIADO")
-    print("   -> Streaming: Activo 24/7")
-    print("   -> Histórico Parquet: Activo 10:00 a 18:00")
-    
+    print("🟢 SISTEMA ENRIQUECIDO INICIADO (Posiciones + Retrasos)")
     while True:
         procesar_flujo()
-        print("⏳ Esperando 20 segundos...")
-        time.sleep(20)
+        # Tiempo aumentado a 60s para estabilidad total
+        print(f"⏳ Esperando 60 segundos para evitar saturación...")
+        time.sleep(60)
