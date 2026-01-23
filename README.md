@@ -1,4 +1,4 @@
-# 🚌 Monitor de Transporte en Tiempo Real - Dublín
+# 🚌 Monitor de Transporte en Tiempo Real - Irlanda
 
 Este proyecto es un pipeline de datos híbrido que extrae información en tiempo real de la flota de autobuses de Irlanda, la visualiza en un Dashboard de Power BI y almacena un histórico localmente en formato Parquet.
 
