@@ -7,6 +7,7 @@ Este proyecto es un pipeline de datos híbrido que extrae información en tiempo
 - **Data Lake Local:** Almacenamiento automático en archivos **Parquet** particionados por fecha.
 - **Filtro Operativo:** El guardado histórico solo se activa de 10:00 a 18:00 (ajustable en el código).
 - **Contenerización:** Ejecución aislada mediante **Docker**.
+- **Modelo Relacional:** Arquitectura de estrella con dimensiones geográfica y temporal.
 
 ## 🛠️ Requisitos Previos
 
@@ -36,8 +37,15 @@ Para que el reporte reciba la data correctamente, el conjunto de datos de stream
 | `longitude` | Número | GPS Longitud |
 | `timestamp` | Fecha y hora | Momento de la captura |
 
-
 3. **Análisis de datos históricos:** Activa esta opción para permitir que Power BI cree un informe con "memoria" sobre los datos recibidos.
+
+## 🏗️ Modelo de Datos y Dimensiones
+
+Se ha implementado un esquema en estrella para optimizar el análisis histórico en Power BI Desktop:
+
+- **Dim_Geografia:** Cargada desde `master_data/Dim_Geografia.csv`. Clasifica la flota en regiones (Dublin, Cork, Galway, etc.) mediante coordenadas.
+- **Jerarquía de Fechas:** Inteligencia de tiempo (M) para análisis de tendencias y horas punta.
+- **Tabla de Medidas:** KPIs centralizados para el cálculo de retrasos críticos y porcentajes de cumplimiento.
 
 ## ⚙️ Configuración del Proyecto
 
