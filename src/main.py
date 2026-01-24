@@ -18,7 +18,7 @@ URL_TRIPS = "https://api.nationaltransport.ie/gtfsr/v2/tripupdates"
 def guardar_historico_parquet(lote_datos):
     """Guarda los datos enriquecidos en formato Parquet (10am-6pm)"""
     ahora = datetime.now()
-    if 10 <= ahora.hour < 18: 
+    if 9 <= ahora.hour < 18: 
         fecha_str = ahora.strftime('%Y-%m-%d')
         ruta_carpeta = f"data/fecha={fecha_str}"
         if not os.path.exists(ruta_carpeta):
