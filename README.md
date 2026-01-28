@@ -1,48 +1,55 @@
-# 🚌 Monitor de Transporte en Tiempo Real - Irlanda
+# 🚌 Sistema de Inteligencia de Transporte - Irlanda (NTA)
 
-Este proyecto es un pipeline de datos híbrido que extrae información en tiempo real de la flota de autobuses de Irlanda, la visualiza en un Dashboard de Power BI, la enriquece con datos meteorológicos históricos y almacena todo localmente en formato Parquet.
+Este proyecto es un ecosistema de datos de alto rendimiento que integra telemetría en tiempo real (GTFS-R) con la estructura oficial de horarios y rutas (GTFS Static) de la National Transport Authority de Irlanda. El pipeline automatiza la captura, el enriquecimiento climático y el almacenamiento en un Data Lake local para análisis avanzado en Power BI.
 
-## 🚀 Características
-- **Streaming en tiempo real:** Envío de datos cada 20 segundos a Power BI.
-- **Data Lake Local:** Almacenamiento automático en archivos **Parquet** particionados por fecha.
-- **Enriquecimiento Climático:** Script independiente para capturar temperatura y lluvia (Open-Meteo API) por región.
-- **Filtro Operativo:** El guardado histórico de buses se activa de 10:00 a 18:00 (ajustable en el código).
-- **Contenerización:** Ejecución aislada mediante **Docker**.
-- **Modelo Relacional:** Arquitectura de estrella avanzada con correlación entre transporte y clima.
+## 🚀 Características y Capacidades
+- **Streaming Híbrido:** Captura de datos cada 20 segundos y envío a Power BI Service para monitoreo "Live".
+- **Integración GTFS Pro:** Uso de archivos maestros (`agency`, `routes`, `trips`, `stops`) para normalizar la telemetría.
+- **Data Lake con Hive Partitioning:** Almacenamiento en archivos **Parquet** particionados por fecha para optimizar lecturas masivas.
+- **Correlación Meteorológica:** Integración con Open-Meteo API para cruzar retrasos de flota con intensidad de lluvia (mm/h).
+- **Modelo Relacional 2.0:** Esquema en estrella puro con relaciones unidireccionales de integridad referencial.
 
-## 🛠️ Requisitos Previos
+## 🛠️ Requisitos e Infraestructura
 
-1. **API Key de la NTA:**
-   - Regístrate en el [Portal de Desarrolladores de la NTA](https://developer.nationaltransport.ie/api-details#api=gtfsr&operation=gtfsr-v2).
-   - Suscríbete a la API **GTFS Realtime v2**.
-   - Obtén tu `Primary Key`.
+1. **Datos Maestros (GTFS Static):**
+   - Descarga los archivos `.txt` oficiales de la [NTA Developer Portal](https://developer.nationaltransport.ie/api-details#api=gtfsr&operation=gtfsr-v2).
+   - Estos archivos (`routes`, `agency`, `trips`, `calendar`, `stops`) son la base de las Dimensiones del modelo.
 
-2. **Power BI Service:**
-   - Cuenta Pro o Premium para usar conjuntos de datos de streaming.
+2. **API Key de la NTA:**
+   - Suscríbete a la API **GTFS Realtime v2** para obtener tu `Primary Key`.
 
-## 📊 Configuración de Power BI (Estructura de Datos)
+3. **Power BI Desktop & Service:**
+   - Modelo configurado para manejar conjuntos de datos de streaming y almacenamiento local histórico.
 
-El conjunto de datos de streaming debe tener la siguiente estructura exacta:
+## 📊 Arquitectura del Modelo de Datos (Esquema en Estrella)
 
-| Campo | Tipo de datos | Descripción |
-| :--- | :--- | :--- |
-| `bus_id` | Texto | Identificador único del vehículo |
-| `route_id` | Texto | Identificador de la línea de bus |
-| `trip_id` | Texto | ID del viaje específico |
-| `start_time` | Texto | Hora programada de salida |
-| `direction` | Número | Sentido de la ruta: 0 o 1 |
-| `latitude` | Número | GPS Latitud |
-| `longitude` | Número | GPS Longitud |
-| `timestamp` | Fecha y hora | Momento de la captura |
+El modelo en Power BI ha sido optimizado para eliminar redundancias y permitir análisis de causa-efecto:
 
-## 🏗️ Modelo de Datos y Dimensiones
+### Tablas de Hechos (Facts)
+- **Fact_Monitoreo_Buses:** Telemetría GPS histórica y estado de puntualidad (delay_min).
+- **Fact_Clima:** Histórico de precipitaciones y temperatura por hora y región.
 
-Se ha implementado un esquema en estrella para optimizar el análisis histórico en Power BI Desktop:
+### Dimensiones Maestras (GTFS Based)
+- **Dim_GTFS_Routes:** Nombres reales de rutas (ej. "L12: Ballywaltrim - Bray").
+- **Dim_GTFS_Agency:** Operadores de transporte (Dublin Bus, Go-Ahead, Irish Rail).
+- **Dim_GTFS_Trips:** Relación de viajes programados vs. ejecutados.
+- **Dim_GTFS_Stops:** Coordenadas de paradas oficiales para análisis geográfico.
+- **Dim_Calendario_Universal:** Dimensión temporal única para sincronización de hechos.
+- **Dim_Operativa_Dias (Calendar):** Reglas de servicio por service_id (L-D).
 
-- **Fact_Monitoreo_Buses:** Datos históricos de la flota recolectados por el script principal.
-- **Fact_Clima:** Datos de temperatura y precipitaciones (mm) por hora y región.
-- **Dim_Geografia:** Cargada desde `master_data/Dim_Geografia.csv`. Clasifica la flota en regiones y provee las coordenadas para la obtención del clima.
-- **Jerarquía Temporal:** Normalización de horas para cruzar el estado de los buses con la intensidad de la lluvia en el gráfico de correlación.
+
+
+## 🏗️ Estructura del Data Lake (Parquet)
+
+El sistema utiliza una estructura de carpetas optimizada para Power BI (Hive Partitioning), permitiendo cargar años de datos en segundos:
+
+```text
+data/
+ └── fecha=YYYY-MM-DD/
+      └── HH_MM_SS_buses.parquet
+data_clima/
+ └── fecha=YYYY-MM-DD/
+      └── clima_regional.parquet
 
 ## ⚙️ Configuración del Proyecto
 
@@ -74,3 +81,10 @@ El script crea automáticamente una estructura de carpetas tipo Data Lake para f
 **Clima:** data_clima/fecha=YYYY-MM-DD/clima.parquet
 
 Esta estructura permite a Power BI Desktop cargar la carpeta completa y reconocer automáticamente la columna de fecha por el nombre de la subcarpeta (Hive Partitioning).
+
+
+
+
+## Nota Operativa:
+
+Los datos de buses se recolectan preferentemente en la ventana crítica de 10:00 a 18:00 para optimizar el almacenamiento del Data Lake.
