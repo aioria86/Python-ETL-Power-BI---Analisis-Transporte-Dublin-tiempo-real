@@ -50,6 +50,7 @@ data/
 data_clima/
  └── fecha=YYYY-MM-DD/
       └── clima_regional.parquet
+```
 
 ## ⚙️ Configuración del Proyecto
 
