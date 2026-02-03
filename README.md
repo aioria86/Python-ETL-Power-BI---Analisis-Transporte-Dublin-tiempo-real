@@ -8,11 +8,27 @@ Este proyecto es un ecosistema de datos de alto rendimiento que integra telemetr
 - **Data Lake con Hive Partitioning:** Almacenamiento en archivos **Parquet** particionados por fecha para optimizar lecturas masivas.
 - **Correlación Meteorológica:** Integración con Open-Meteo API para cruzar retrasos de flota con intensidad de lluvia (mm/h).
 - **Modelo Relacional 2.0:** Esquema en estrella puro con relaciones unidireccionales de integridad referencial.
+- **Sincronización de Métricas (Sync 15m):** Implementación de una ventana móvil de 15 minutos para la métrica de "Vehículos Activos" y "OTR", eliminando "buses fantasma" y asegurando coherencia entre el mapa y los KPIs.
+- **Lógica de Puntualidad (OTR):** Nueva arquitectura de medidas DAX que calculan el *On-Time Ratio* basado en la última posición reportada de cada unidad, evitando inflado de datos por frecuencia de muestreo.
+- **Análisis de Ventana Deslizante:** Gráfica de tendencia de la última hora (Rolling Window) con filtrado relativo para detección de cuellos de botella en tiempo real.
+- **Normalización de Tipos:** Corrección de la cadena de suministro de datos para asegurar que métricas de retraso y lluvia operen sobre valores numéricos nativos, optimizando el rendimiento del motor DAX.
+  
+
+## 📈 Visualizaciones Principales
+
+### 1. Panel de Control en Tiempo Real y KPIs
+Monitoreo de Vehículos Activos, On-Time Ratio (OTR) y Cumplimiento de Salidas comparado contra la semana pasada y el intervalo previo de 15 minutos.
+![Dashboard Principal](./img/reporte-realtime---transporte-nta-irlanda.png)
+
+### 2. Panel de Control con Datos Historicos
+Monitoreo de Vehículos Activos en días pasados.
+![Tendencia de Retraso](./img/reporte-historico---transporte-nta-irlanda.png)
+
 
 ## 🛠️ Requisitos e Infraestructura
 
 1. **Datos Maestros (GTFS Static):**
-   - Descarga los archivos `.txt` oficiales de la [NTA Developer Portal](https://developer.nationaltransport.ie/api-details#api=gtfsr&operation=gtfsr-v2).
+   - Descarga los archivos `.txt` oficiales de la [NTA Developer Portal](https://developer.nationaltransport.ie/api-``details#api=gtfsr&operation=gtfsr-v2).
    - Estos archivos (`routes`, `agency`, `trips`, `calendar`, `stops`) son la base de las Dimensiones del modelo.
 
 2. **API Key de la NTA:**
@@ -26,16 +42,18 @@ Este proyecto es un ecosistema de datos de alto rendimiento que integra telemetr
 El modelo en Power BI ha sido optimizado para eliminar redundancias y permitir análisis de causa-efecto:
 
 ### Tablas de Hechos (Facts)
-- **Fact_Monitoreo_Buses:** Telemetría GPS histórica y estado de puntualidad (delay_min).
-- **Fact_Clima:** Histórico de precipitaciones y temperatura por hora y región.
+- **RealTimeData:** Streaming de telemetría GPS, estado de puntualidad e indicadores de ventana móvil.
+- **Fact_Monitoreo_Buses:** Histórico de telemetría procesada para comparativas inter-semanales.
+- **Fact_Clima:** Datos horarios de precipitaciones (mm/h) y temperatura de la API Meteostat.
+
 
 ### Dimensiones Maestras (GTFS Based)
-- **Dim_GTFS_Routes:** Nombres reales de rutas (ej. "L12: Ballywaltrim - Bray").
-- **Dim_GTFS_Agency:** Operadores de transporte (Dublin Bus, Go-Ahead, Irish Rail).
-- **Dim_GTFS_Trips:** Relación de viajes programados vs. ejecutados.
+- **Dim_rutas:** Nombres reales de rutas (ej. "L12: Ballywaltrim - Bray").
+- **Dim_agencia:** Operadores de transporte (Dublin Bus, Go-Ahead, Irish Rail).
+- **Dim_viajes:** Relación de viajes programados vs. ejecutados.
 - **Dim_GTFS_Stops:** Coordenadas de paradas oficiales para análisis geográfico.
-- **Dim_Calendario_Universal:** Dimensión temporal única para sincronización de hechos.
-- **Dim_Operativa_Dias (Calendar):** Reglas de servicio por service_id (L-D).
+- **Dim_Calendario¿:** Dimensión temporal única para sincronización de hechos.
+- **Dim_GTFS_servicios:** Reglas de servicio por service_id (L-D).
 
 
 
@@ -88,4 +106,4 @@ Esta estructura permite a Power BI Desktop cargar la carpeta completa y reconoce
 
 ## Nota Operativa:
 
-Los datos de buses se recolectan preferentemente en la ventana crítica de 10:00 a 18:00 para optimizar el almacenamiento del Data Lake.
+Los datos de buses se recolectan preferentemente en la ventana crítica de 10:00 a 19:00 para optimizar el almacenamiento del Data Lake.
